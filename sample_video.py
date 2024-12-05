@@ -11,31 +11,31 @@ import http.server
 import socketserver
 import os
 
-# Hàm sinh video
+# Function to generate video
 def generate_video(
     video_size, video_length, infer_steps, prompt, flow_reverse, seed, use_cpu_offload, embedded_guidance_scale, save_path
 ):
     try:
-        # Xác thực các tham số đầu vào
-        width, height = map(int, video_size.split(" "))  # Tách và xác thực kích thước video
+        # Validate input parameters
+        width, height = map(int, video_size.split(" "))
         if width <= 0 or height <= 0:
             return "Lỗi: Chiều rộng và chiều cao phải là số nguyên dương."
 
         video_length = int(video_length)
-        if (video_length - 1) % 4 != 0:  # Xác thực video_length
+        if (video_length - 1) % 4 != 0:
             return f"Lỗi: `(video_length - 1)` phải chia hết cho 4, hiện tại nhận giá trị {video_length}"
 
         infer_steps = int(infer_steps)
         seed = int(seed)
         flow_reverse = bool(flow_reverse)
         use_cpu_offload = bool(use_cpu_offload)
-        embedded_guidance_scale = float(embedded_guidance_scale) if embedded_guidance_scale is not None else 1.0  # Mặc định là 1.0
-        save_path = save_path or "./results"
+        embedded_guidance_scale = float(embedded_guidance_scale) if embedded_guidance_scale is not None else 6.0
+        save_path = Path(save_path or "./results")  # Default save path
 
-        # Giá trị cố định cho guidance scale
-        guidance_scale = 1.0  # Cố định là 1
+        # Fixed guidance scale
+        guidance_scale = 1.0  # Fixed to 1
 
-        # Xây dựng các tham số mặc định
+        # Parse args and set default values
         args = parse_args()
         args.model = "HYVideo-T/2-cfgdistill"
         args.video_size = (width, height)
@@ -45,18 +45,19 @@ def generate_video(
         args.flow_reverse = flow_reverse
         args.seed = seed
         args.use_cpu_offload = use_cpu_offload
-        args.embedded_guidance_scale = embedded_guidance_scale  # Đảm bảo giá trị hợp lệ
-        args.cfg_scale = guidance_scale  # Cố định là 1
-        args.save_path = Path(save_path)
+        args.embedded_guidance_scale = embedded_guidance_scale
+        args.cfg_scale = guidance_scale
+        args.save_path = save_path
 
+        # Ensure save path exists
         if not args.save_path.exists():
             args.save_path.mkdir(parents=True, exist_ok=True)
 
-        # Tải mô hình
+        # Load models
         models_root_path = Path("ckpts")
         hunyuan_video_sampler = HunyuanVideoSampler.from_pretrained(models_root_path, args=args)
 
-        # Bắt đầu tạo video
+        # Start sampling
         outputs = hunyuan_video_sampler.predict(
             prompt=args.prompt,
             height=args.video_size[1],
@@ -65,12 +66,12 @@ def generate_video(
             seed=args.seed,
             infer_steps=args.infer_steps,
             flow_reverse=args.flow_reverse,
-            guidance_scale=args.cfg_scale,  # Cố định là 1
+            guidance_scale=args.cfg_scale,
             embedded_guidance_scale=args.embedded_guidance_scale,
         )
         samples = outputs["samples"]
 
-        # Lưu video
+        # Save samples
         video_files = []
         for i, sample in enumerate(samples):
             sample = samples[i].unsqueeze(0)
@@ -78,19 +79,20 @@ def generate_video(
             save_file = args.save_path / f"{time_flag}_seed{outputs['seeds'][i]}.mp4"
             save_videos_grid(sample, str(save_file), fps=24)
             logger.info(f"Video đã được lưu tại: {save_file}")
-            video_files.append(save_file)
+            video_files.append(str(save_file))
 
-        return video_files
+        # Return video file path and video preview
+        return video_files[0], video_files[0]  # Return the same file for both preview and download
 
     except Exception as e:
         logger.error(f"Lỗi: {e}")
-        return str(e)
+        return str(e), None
 
-# Giao diện Gradio
+# Gradio interface
 interface = gr.Interface(
     fn=generate_video,
     inputs=[
-        gr.Textbox(label="Kích thước Video (ví dụ: 540 960)", value="540 960"),  # --video-size
+        gr.Textbox(label="Kích thước Video (ví dụ: 960 540)", value="960 540"),  # --video-size
         gr.Slider(
             5, 257, step=4, label="Độ dài Video", value=129
         ),  # --video-length; chỉ cho phép bội số của 4 (+1)
@@ -99,18 +101,19 @@ interface = gr.Interface(
         gr.Checkbox(label="Flow Reverse", value=True),  # --flow-reverse
         gr.Number(label="Seed", value=0),  # --seed
         gr.Checkbox(label="Dùng CPU Offload", value=True),  # --use-cpu-offload
-        gr.Slider(0.0, 10.0, step=0.1, label="Embedded Guidance Scale", value=1.0),  # --embedded-guidance-scale
-        gr.Textbox(label="Đường dẫn lưu file", value="./results"),  # --save-path
+        gr.Slider(0.0, 10.0, step=0.1, label="Embedded Guidance Scale", value=6.0),  # --embedded-guidance-scale
+        gr.Textbox(label="Đường dẫn lưu file (Local Directory)", value="./results"),  # --save-path
     ],
     outputs=[
-        gr.File(label="Video đã tạo"),  # Đầu ra video
+        gr.Video(label="Xem Video Đã Tạo"),  # Display video preview
+        gr.File(label="Tải về Video đã tạo"),  # Output video for download
     ],
-    title="Hunyuan Video Generator",
+    title="Hunyuan Video Generator By Pencil Group",
     description="Tạo video với fixed guidance scale là 1 và độ dài video được xác thực.",
 )
 
 if __name__ == "__main__":
-    # Tuỳ chọn: Khởi chạy server cục bộ để lưu trữ video
+    # Optional: Start a local server for hosting files
     def start_server():
         handler = http.server.SimpleHTTPRequestHandler
         with socketserver.TCPServer(("0.0.0.0", 8000), handler) as httpd:
@@ -120,5 +123,5 @@ if __name__ == "__main__":
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
 
-    # Khởi chạy giao diện Gradio
+    # Launch Gradio interface
     interface.launch(share=True)
