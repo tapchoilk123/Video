@@ -44,4 +44,5 @@ WORKDIR /app/HunyuanVideo
 EXPOSE 7860
 
 # Run a default shell to allow manual interaction
-CMD ["/bin/bash"]
+# Define ENTRYPOINT
+ENTRYPOINT ["/bin/bash", "-c", "DATA_DIR=${DATA_DIRECTORY:-/workspace}; mkdir -p $DATA_DIR && cd $DATA_DIR && python sample_video.py"]
