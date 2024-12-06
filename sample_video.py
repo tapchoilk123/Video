@@ -108,7 +108,7 @@ interface = gr.Interface(
         gr.Video(label="Xem Video Đã Tạo"),  # Display video preview
         gr.File(label="Tải về Video đã tạo"),  # Output video for download
     ],
-    title="Hunyuan Video Generator By Pencil Group",
+    title="AVAS AI Video Generator",
     description="Tạo video với fixed guidance scale là 1 và độ dài video được xác thực.",
 )
 
